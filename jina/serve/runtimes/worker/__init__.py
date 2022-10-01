@@ -7,10 +7,12 @@ import grpc
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
 
+from jina.excepts import RuntimeTerminated
 from jina.helper import get_full_version
 from jina.importer import ImportExtensions
 from jina.proto import jina_pb2, jina_pb2_grpc
 from jina.serve.runtimes.asyncio import AsyncNewLoopRuntime
+from jina.serve.runtimes.helper import _get_grpc_server_options
 from jina.serve.runtimes.request_handlers.data_request_handler import DataRequestHandler
 from jina.types.request.data import DataRequest
 
@@ -19,9 +21,9 @@ class WorkerRuntime(AsyncNewLoopRuntime, ABC):
     """Runtime procedure leveraging :class:`Grpclet` for sending DataRequests"""
 
     def __init__(
-            self,
-            args: argparse.Namespace,
-            **kwargs,
+        self,
+        args: argparse.Namespace,
+        **kwargs,
     ):
         """Initialize grpc and data request handling.
         :param args: args from CLI
@@ -36,10 +38,10 @@ class WorkerRuntime(AsyncNewLoopRuntime, ABC):
         """
         if self.metrics_registry:
             with ImportExtensions(
-                    required=True,
-                    help_text='You need to install the `prometheus_client` to use the montitoring functionality of jina',
+                required=True,
+                help_text='You need to install the `prometheus_client` to use the montitoring functionality of jina',
             ):
-                from prometheus_client import Summary
+                from prometheus_client import Counter, Summary
 
             self._summary_time = (
                 Summary(
@@ -49,11 +51,30 @@ class WorkerRuntime(AsyncNewLoopRuntime, ABC):
                     namespace='jina',
                     labelnames=('runtime_name',),
                 )
-                    .labels(self.args.name)
-                    .time()
+                .labels(self.args.name)
+                .time()
             )
+
+            self._failed_requests_metrics = Counter(
+                'failed_requests',
+                'Number of failed requests',
+                registry=self.metrics_registry,
+                namespace='jina',
+                labelnames=('runtime_name',),
+            ).labels(self.args.name)
+
+            self._successful_requests_metrics = Counter(
+                'successful_requests',
+                'Number of successful requests',
+                registry=self.metrics_registry,
+                namespace='jina',
+                labelnames=('runtime_name',),
+            ).labels(self.args.name)
+
         else:
             self._summary_time = contextlib.nullcontext()
+            self._failed_requests_metrics = None
+            self._successful_requests_metrics = None
         # Keep this initialization order
         # otherwise readiness check is not valid
         # The DataRequestHandler needs to be started BEFORE the grpc server
@@ -68,10 +89,7 @@ class WorkerRuntime(AsyncNewLoopRuntime, ABC):
         """
 
         self._grpc_server = grpc.aio.server(
-            options=[
-                ('grpc.max_send_message_length', -1),
-                ('grpc.max_receive_message_length', -1),
-            ]
+            options=_get_grpc_server_options(self.args.grpc_server_options)
         )
 
         jina_pb2_grpc.add_JinaSingleDataRequestRPCServicer_to_server(
@@ -161,7 +179,10 @@ class WorkerRuntime(AsyncNewLoopRuntime, ABC):
                 if self.logger.debug_enabled:
                     self._log_data_request(requests[0])
 
-                return await self._data_request_handler.handle(requests=requests)
+                result = await self._data_request_handler.handle(requests=requests)
+                if self._successful_requests_metrics:
+                    self._successful_requests_metrics.inc()
+                return result
             except (RuntimeError, Exception) as ex:
                 self.logger.error(
                     f'{ex!r}'
@@ -173,6 +194,16 @@ class WorkerRuntime(AsyncNewLoopRuntime, ABC):
 
                 requests[0].add_exception(ex, self._data_request_handler._executor)
                 context.set_trailing_metadata((('is-error', 'true'),))
+                if self._failed_requests_metrics:
+                    self._failed_requests_metrics.inc()
+
+                if (
+                    self.args.exit_on_exceptions
+                    and type(ex).__name__ in self.args.exit_on_exceptions
+                ):
+                    self.logger.info('Exiting because of "--exit-on-exceptions".')
+                    raise RuntimeTerminated
+
                 return requests[0]
 
     async def _status(self, empty, context) -> jina_pb2.JinaInfoProto:

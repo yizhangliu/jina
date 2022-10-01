@@ -18,6 +18,7 @@ from jina.importer import ImportExtensions
 from jina.proto import jina_pb2, jina_pb2_grpc
 from jina.serve.networking import GrpcConnectionPool
 from jina.serve.runtimes.asyncio import AsyncNewLoopRuntime
+from jina.serve.runtimes.helper import _get_grpc_server_options
 from jina.serve.runtimes.request_handlers.data_request_handler import DataRequestHandler
 from jina.types.request.data import DataRequest, Response
 
@@ -46,6 +47,7 @@ class HeadRuntime(AsyncNewLoopRuntime, ABC):
         self.name = args.name
         self._deployment_name = os.getenv('JINA_DEPLOYMENT_NAME', 'worker')
         self.connection_pool = GrpcConnectionPool(
+            runtime_name=self.name,
             logger=self.logger,
             compression=args.compression,
             metrics_registry=self.metrics_registry,
@@ -142,10 +144,7 @@ class HeadRuntime(AsyncNewLoopRuntime, ABC):
     async def async_setup(self):
         """Wait for the GRPC server to start"""
         self._grpc_server = grpc.aio.server(
-            options=[
-                ('grpc.max_send_message_length', -1),
-                ('grpc.max_receive_message_length', -1),
-            ]
+            options=_get_grpc_server_options(self.args.grpc_server_options)
         )
 
         jina_pb2_grpc.add_JinaSingleDataRequestRPCServicer_to_server(

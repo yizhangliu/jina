@@ -28,7 +28,7 @@ def test_help_lookup(cli, capsys):
         assert cli in nkw2kw
         lookup_and_print(cli)
         captured = capsys.readouterr()
-        assert captured.out
+        assert 'Traceback (most recent call last)' not in captured.out
 
 
 def test_main_cli():
@@ -37,6 +37,13 @@ def test_main_cli():
 
 def test_cli_help():
     subprocess.check_call(['jina', 'help', 'deployment'])
+
+
+def test_cli_hub():
+    subprocess.check_call(['jina', 'hub', '--help'])
+    for cmd in ['new', 'status', 'pull', 'push']:
+        subprocess.check_call(['jina', 'hub', cmd, '--help'])
+    subprocess.check_call(['jina', 'hub', 'pull', 'jinahub://DummyHubExecutor'])
 
 
 def test_cli_warn_unknown_args():
@@ -59,6 +66,22 @@ def test_all_start_method(smethod):
     assert smethod in s.decode()
 
 
+def test_help_non_exist():
+    s = subprocess.check_output(
+        ['jina', 'help', 'abcdefg'],
+        stderr=subprocess.STDOUT,
+    )
+    assert 'misspelling' in s.decode()
+
+
+def test_help_exist():
+    s = subprocess.check_output(
+        ['jina', 'help', 'port'],
+        stderr=subprocess.STDOUT,
+    )
+    assert 'a CLI argument of Jina' in s.decode()
+
+
 def test_parse_env_map():
     a = set_deployment_parser().parse_args(
         ['--env', 'key1=value1', '--env', 'key2=value2']
@@ -74,9 +97,11 @@ def test_parse_env_map():
 @pytest.mark.slow
 def test_ping():
     a1 = set_pod_parser().parse_args([])
-    a2 = set_ping_parser().parse_args(['0.0.0.0', str(a1.port)])
+    a2 = set_ping_parser().parse_args(['executor', f'0.0.0.0:{a1.port}'])
 
-    a3 = set_ping_parser().parse_args(['0.0.0.1', str(a1.port), '--timeout', '1000'])
+    a3 = set_ping_parser().parse_args(
+        ['executor', f'0.0.0.1:{a1.port}', '--timeout', '1000']
+    )
 
     with pytest.raises(SystemExit) as cm:
         with PodFactory.build_pod(a1):

@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import functools
 import inspect
 import json
@@ -9,6 +10,7 @@ import re
 import sys
 import threading
 import time
+import urllib
 import uuid
 import warnings
 from argparse import ArgumentParser, Namespace
@@ -284,9 +286,9 @@ def parse_arg(v: str) -> Optional[Union[bool, int, str, list, float]]:
 
     if v.startswith('[') and v.endswith(']'):
         # function args must be immutable tuples not list
-        tmp = v.replace('[', '').replace(']', '').strip().split(',')
+        tmp = v.replace('[', '').replace(']', '').strip()
         if len(tmp) > 0:
-            return [parse_arg(vv.strip()) for vv in tmp]
+            return [parse_arg(vv.strip()) for vv in tmp.split(',')]
         else:
             return []
     try:
@@ -929,6 +931,8 @@ def get_full_version() -> Optional[Tuple[Dict, Dict]]:
     import yaml
     from google.protobuf.internal import api_implementation
     from grpc import _grpcio_metadata
+    from hubble import __version__ as __hubble_version__
+    from jcloud import __version__ as __jcloud_version__
 
     from jina import (
         __docarray_version__,
@@ -945,9 +949,11 @@ def get_full_version() -> Optional[Tuple[Dict, Dict]]:
         info = {
             'jina': __version__,
             'docarray': __docarray_version__,
+            'jcloud': __jcloud_version__,
+            'jina-hubble-sdk': __hubble_version__,
             'jina-proto': __proto_version__,
             'protobuf': google.protobuf.__version__,
-            'proto-backend': api_implementation._default_implementation_type,
+            'proto-backend': api_implementation.Type(),
             'grpcio': getattr(grpc, '__version__', _grpcio_metadata.__version__),
             'pyyaml': yaml.__version__,
             'python': platform.python_version(),
@@ -960,6 +966,7 @@ def get_full_version() -> Optional[Tuple[Dict, Dict]]:
             'session-id': str(random_uuid(use_uuid1=True)),
             'uptime': __uptime__,
             'ci-vendor': get_ci_vendor() or __unset_msg__,
+            'internal': 'jina-ai' in os.getenv('GITHUB_ACTION_REPOSITORY', __unset_msg__)
         }
 
         env_info = {k: os.getenv(k, __unset_msg__) for k in __jina_env__}
@@ -1561,7 +1568,7 @@ def _parse_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
             return_scheme['port'],
             return_scheme['protocol'],
             return_scheme['tls'],
-        ) = _parse_host_scheme(kwargs['host'])
+        ) = parse_host_scheme(kwargs['host'])
 
         for key, value in return_scheme.items():
             if value:
@@ -1584,7 +1591,7 @@ def _delete_host_slash(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     return kwargs
 
 
-def _parse_host_scheme(host: str) -> Tuple[str, str, str, bool]:
+def parse_host_scheme(host: str) -> Tuple[str, str, str, bool]:
     scheme, _hostname, port = _parse_url(host)
 
     tls = None
@@ -1645,3 +1652,36 @@ def _parse_ports(port: str) -> Union[int, List]:
         else:
             raise e
     return port
+
+
+def send_telemetry_event(event: str, obj: Any, **kwargs) -> None:
+    """Sends in a thread a request with telemetry for a given event
+    :param event: Event leading to the telemetry entry
+    :param obj: Object to be tracked
+    :param kwargs: Extra kwargs to be passed to the data sent
+    """
+
+    if 'JINA_OPTOUT_TELEMETRY' in os.environ:
+        return
+
+    def _telemetry():
+        url = 'https://telemetry.jina.ai/'
+        try:
+            from jina.helper import get_full_version
+
+            metas, _ = get_full_version()
+            data = base64.urlsafe_b64encode(
+                json.dumps(
+                    {**metas, 'event': f'{obj.__class__.__name__}.{event}', **kwargs}
+                ).encode('utf-8')
+            )
+
+            req = urllib.request.Request(
+                url, data=data, headers={'User-Agent': 'Mozilla/5.0'}
+            )
+            urllib.request.urlopen(req)
+
+        except:
+            pass
+
+    threading.Thread(target=_telemetry, daemon=True).start()

@@ -9,10 +9,11 @@ from unittest import mock
 
 import pytest
 import yaml
-
 from docarray import Document, DocumentArray
-from jina import Client, Executor, Flow, requests
+
+from jina import Client, Executor, Flow, __cache_path__, requests
 from jina.clients.request import request_generator
+from jina.excepts import RuntimeFailToStart
 from jina.parsers import set_pod_parser
 from jina.serve.executors.metas import get_default_metas
 from jina.serve.networking import GrpcConnectionPool
@@ -80,9 +81,8 @@ def test_executor_with_pymodule_path():
         ex = Executor.load_config(
             '''
         jtype: BaseExecutor
-        metas:
-            py_modules:
-                - jina.no_valide.executor
+        py_modules:
+            - jina.no_valide.executor
         '''
         )
 
@@ -91,13 +91,42 @@ def test_executor_with_pymodule_path():
     jtype: MyExecutor
     with:
         bar: 123
-    metas:
-        py_modules:
-            - unit.serve.executors.dummy_executor
+    py_modules:
+        - unit.serve.executors.dummy_executor
     '''
     )
     assert ex.bar == 123
     assert ex.process(DocumentArray([Document()]))[0].text == 'hello world'
+
+
+def test_flow_uses_with_pymodule_path():
+    with Flow.load_config(
+        '''
+    jtype: Flow
+    executors:
+        - uses: unit.serve.executors.dummy_executor.MyExecutor
+          uses_with:
+            bar: 123
+    '''
+    ):
+        pass
+
+    with Flow().add(
+        uses='unit.serve.executors.dummy_executor.MyExecutor', uses_with={'bar': 123}
+    ):
+        pass
+
+    with pytest.raises(RuntimeFailToStart):
+        with Flow.load_config(
+            '''
+            jtype: Flow
+            executors:
+                - uses: jina.no_valide.executor
+                  uses_with:
+                    bar: 123
+            '''
+        ):
+            pass
 
 
 @property
@@ -370,22 +399,22 @@ def test_set_workspace(tmpdir):
     with Flow().add(uses=WorkspaceExec, uses_metas={'workspace': str(tmpdir)}) as f:
         resp = f.post(on='/foo', inputs=Document())
     assert resp[0].text == complete_workspace
+    complete_workspace_no_replicas = os.path.abspath(
+        os.path.join(tmpdir, 'WorkspaceExec')
+    )
+    assert (
+        WorkspaceExec(workspace=str(tmpdir)).workspace == complete_workspace_no_replicas
+    )
 
 
 def test_default_workspace(tmpdir):
-    with mock.patch.dict(
-        os.environ,
-        {'JINA_DEFAULT_WORKSPACE_BASE': str(os.path.join(tmpdir, 'mock-workspace'))},
-    ):
-        with Flow().add(uses=WorkspaceExec) as f:
-            resp = f.post(on='/foo', inputs=Document())
-        assert resp[0].text
+    with Flow().add(uses=WorkspaceExec) as f:
+        resp = f.post(on='/foo', inputs=Document())
+    assert resp[0].text
 
-        result_workspace = resp[0].text
+    result_workspace = resp[0].text
 
-        assert result_workspace == os.path.join(
-            os.environ['JINA_DEFAULT_WORKSPACE_BASE'], 'WorkspaceExec', '0'
-        )
+    assert result_workspace == os.path.join(__cache_path__, 'WorkspaceExec', '0')
 
 
 @pytest.mark.parametrize(

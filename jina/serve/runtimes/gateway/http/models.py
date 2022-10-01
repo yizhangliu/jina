@@ -2,14 +2,16 @@ from collections import defaultdict
 from datetime import datetime
 from enum import Enum
 from types import SimpleNamespace
-from typing import Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Union
 
 from docarray.document.pydantic_model import PydanticDocument, PydanticDocumentArray
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
-from google.protobuf.pyext.cpp_message import GeneratedProtocolMessageType
 from pydantic import BaseConfig, BaseModel, Field, create_model, root_validator
 
 from jina.proto.jina_pb2 import DataRequestProto, JinaInfoProto, RouteProto, StatusProto
+
+if TYPE_CHECKING:
+    from google.protobuf.pyext.cpp_message import GeneratedProtocolMessageType
 
 PROTO_TO_PYDANTIC_MODELS = SimpleNamespace()
 PROTOBUF_TO_PYTHON_TYPE = {
@@ -97,7 +99,7 @@ def _get_oneof_setter(oneof_fields: List, oneof_key: str) -> Callable:
 
 
 def protobuf_to_pydantic_model(
-    protobuf_model: Union[Descriptor, GeneratedProtocolMessageType]
+    protobuf_model: Union[Descriptor, 'GeneratedProtocolMessageType']
 ) -> BaseModel:
     """
     Converts Protobuf messages to Pydantic model for jsonschema creation/validattion
@@ -114,12 +116,18 @@ def protobuf_to_pydantic_model(
     oneof_fields = defaultdict(list)
     oneof_field_validators = {}
 
-    if isinstance(protobuf_model, Descriptor):
-        model_name = protobuf_model.name
-        protobuf_fields = protobuf_model.fields
-    elif isinstance(protobuf_model, GeneratedProtocolMessageType):
-        model_name = protobuf_model.DESCRIPTOR.name
-        protobuf_fields = protobuf_model.DESCRIPTOR.fields
+    desc = (
+        protobuf_model
+        if isinstance(protobuf_model, Descriptor)
+        else getattr(protobuf_model, 'DESCRIPTOR', None)
+    )
+    if desc:
+        model_name = desc.name
+        protobuf_fields = desc.fields
+    else:
+        raise ValueError(
+            f'protobuf_model is of type {type(protobuf_model)} and has no attribute "DESCRIPTOR"'
+        )
 
     if model_name in vars(PROTO_TO_PYDANTIC_MODELS):
         return PROTO_TO_PYDANTIC_MODELS.__getattribute__(model_name)

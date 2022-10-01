@@ -1,5 +1,5 @@
 (executor-yaml-spec)=
-# YAML specification
+# {octicon}`file-code` YAML specification
 
 This page outlines the specification for valid Executor YAML files.
 
@@ -20,6 +20,8 @@ py_modules:
 metas:
   name: Indexer
   description: Indexes all documents
+  url: https://github.com/janedoe/indexer
+  keywords: ["indexer", "executor"]
 ```
 
 ## Keywords
@@ -36,6 +38,9 @@ List of strings defining the Python dependencies of the Executor. Most notably t
 ### `metas`
 Collection containing meta information about the Executor.
 
-- **`name`**: String that defines the name of the Executor.
-- **`description`**: String that describes the Executor.
+Your executor will also be annoted with this information when publishing to Jina Hub. To get better appeal on Jina Hub, you may want to carefully set the `metas` fields to the correct values:
 
+- **`name`**: Human-readable name of the Executor.
+- **`description`**: Human-readable description of the Executor. 
+- **`url`**: URL of where to find more information about the Executor, normally a GitHub repo URL.
+- **`keywords`**: A list of strings to help users filter and locate your package.

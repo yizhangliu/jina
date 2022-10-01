@@ -4,18 +4,14 @@
 
 Every {class}`~jina.Flow` provides an API Gateway to receive requests over the network. Supported protocols are gRPC, HTTP and WebSocket with TLS.
 
-There are two ways of defining a Gateway, either directly from the Python API or using yaml files. For each section we will show you both possibles way of configuring your Gateway.
+There are two ways of defining a Gateway, either directly from the Python or using YAML. The full YAML specification of Gateway can be {ref}`found here<yaml-spec>`.
 
-```{admonition} Jina Client
-:class: caution
+```{toctree}
+:hidden:
 
-To showcase the workings of Flow, the examples below use a Client connecting to it, all from withing the same Python script.
-
-In most cases, this is not how a real user would access a Flow. Rather, they would use one of {ref}`several ways of connecting over a network<access-flow-api>`.
-This does not affect how you have to configure your Flow API, so the examples here should translate seamlessly.
-
-For more proper use of the Client, and more information about the Client itself, see the {ref}`Client documentation <client>`.
+yaml-spec
 ```
+
 
 (flow-protocol)=
 ## Supported protocols
@@ -209,6 +205,26 @@ with:
         - fine-tuning
 ```
 ````
+
+However, if you want to send requests to a different Executor endpoint, you can still do it without exposing it in the HTTP endpoint, by sending an HTTP request to the `/post` HTTP endpoint while setting  
+`execEndpoint` in the request.
+
+```text
+curl --request POST \
+'http://localhost:12345/post' \
+--header 'Content-Type: application/json' -d '{"data": [{"text": "hello world"}], "execEndpoint": "/foo"}'
+```
+
+The above cURL command is equivalent to passing the `on` parameter to `client.post` as follows:
+
+```python
+from docarray import DocumentArray, Document
+from jina import Client
+
+client = Client(port=12345, protocol='http')
+client.post(on='/foo', inputs=DocumentArray([Document(text='hello world')]))
+```
+
 ### Hide default endpoints
 
 It is possible to hide the default CRUD and debug endpoints in production. This might be useful when the context is not applicable.
@@ -337,7 +353,6 @@ The error-free output below signifies a correctly running Gateway:
     "JINA_AUTH_TOKEN": "(unset)",
     "JINA_DEFAULT_HOST": "(unset)",
     "JINA_DEFAULT_TIMEOUT_CTRL": "(unset)",
-    "JINA_DEFAULT_WORKSPACE_BASE": "#####",
     "JINA_DEPLOYMENT_NAME": "(unset)",
     "JINA_DISABLE_HEALTHCHECK_LOGS": "(unset)",
     "JINA_DISABLE_UVLOOP": "(unset)",
@@ -347,9 +362,7 @@ The error-free output below signifies a correctly running Gateway:
     "JINA_GRPC_RECV_BYTES": "(unset)",
     "JINA_GRPC_SEND_BYTES": "(unset)",
     "JINA_HUBBLE_REGISTRY": "(unset)",
-    "JINA_HUB_CACHE_DIR": "(unset)",
     "JINA_HUB_NO_IMAGE_REBUILD": "(unset)",
-    "JINA_HUB_ROOT": "(unset)",
     "JINA_LOCKS_ROOT": "(unset)",
     "JINA_LOG_CONFIG": "(unset)",
     "JINA_LOG_LEVEL": "(unset)",
@@ -374,7 +387,7 @@ curl http://localhost:12345/status
 ```
 
 ```json
-{"jina":{"jina":"######","docarray":"######","jina-proto":"######","jina-vcs-tag":"(unset)","protobuf":"######","proto-backend":"######","grpcio":"######","pyyaml":"######","python":"######","platform":"######","platform-release":"######","platform-version":"######","architecture":"######","processor":"######","uid":"######","session-id":"######","uptime":"######","ci-vendor":"(unset)"},"envs":{"JINA_AUTH_TOKEN":"(unset)","JINA_DEFAULT_HOST":"(unset)","JINA_DEFAULT_TIMEOUT_CTRL":"(unset)","JINA_DEFAULT_WORKSPACE_BASE":"######","JINA_DEPLOYMENT_NAME":"(unset)","JINA_DISABLE_UVLOOP":"(unset)","JINA_EARLY_STOP":"(unset)","JINA_FULL_CLI":"(unset)","JINA_GATEWAY_IMAGE":"(unset)","JINA_GRPC_RECV_BYTES":"(unset)","JINA_GRPC_SEND_BYTES":"(unset)","JINA_HUBBLE_REGISTRY":"(unset)","JINA_HUB_CACHE_DIR":"(unset)","JINA_HUB_NO_IMAGE_REBUILD":"(unset)","JINA_HUB_ROOT":"(unset)","JINA_LOG_CONFIG":"(unset)","JINA_LOG_LEVEL":"(unset)","JINA_LOG_NO_COLOR":"(unset)","JINA_MP_START_METHOD":"(unset)","JINA_RANDOM_PORT_MAX":"(unset)","JINA_RANDOM_PORT_MIN":"(unset)","JINA_DISABLE_HEALTHCHECK_LOGS":"(unset)","JINA_LOCKS_ROOT":"(unset)"}}
+{"jina":{"jina":"######","docarray":"######","jina-proto":"######","jina-vcs-tag":"(unset)","protobuf":"######","proto-backend":"######","grpcio":"######","pyyaml":"######","python":"######","platform":"######","platform-release":"######","platform-version":"######","architecture":"######","processor":"######","uid":"######","session-id":"######","uptime":"######","ci-vendor":"(unset)"},"envs":{"JINA_AUTH_TOKEN":"(unset)","JINA_DEFAULT_HOST":"(unset)","JINA_DEFAULT_TIMEOUT_CTRL":"(unset)","JINA_DEPLOYMENT_NAME":"(unset)","JINA_DISABLE_UVLOOP":"(unset)","JINA_EARLY_STOP":"(unset)","JINA_FULL_CLI":"(unset)","JINA_GATEWAY_IMAGE":"(unset)","JINA_GRPC_RECV_BYTES":"(unset)","JINA_GRPC_SEND_BYTES":"(unset)","JINA_HUBBLE_REGISTRY":"(unset)","JINA_HUB_NO_IMAGE_REBUILD":"(unset)","JINA_LOG_CONFIG":"(unset)","JINA_LOG_LEVEL":"(unset)","JINA_LOG_NO_COLOR":"(unset)","JINA_MP_START_METHOD":"(unset)","JINA_RANDOM_PORT_MAX":"(unset)","JINA_RANDOM_PORT_MIN":"(unset)","JINA_DISABLE_HEALTHCHECK_LOGS":"(unset)","JINA_LOCKS_ROOT":"(unset)"}}
 ```
 
 (server-compress)=
@@ -457,7 +470,7 @@ When working with very slow executors and a big amount of data, you must set `pr
 ```python
 from jina import Flow
 
-f = Flow(protocol='http', cors=True)
+f = Flow(protocol='http', cors=True, prefetch=10)
 ```
 ````
 
@@ -466,7 +479,8 @@ f = Flow(protocol='http', cors=True)
 jtype: Flow
 with:
   protocol: 'http'
-  cors: True, 
+  cors: True,
+  prefetch: 10
 ```
 ````
 

@@ -64,8 +64,10 @@ the basic entrypoint of the image calls `jina executor` {ref}`CLI <../api/jina_c
 ENTRYPOINT ["jina", "executor", "--uses", "config.yml"]
 ```
 
-```{tip}
-We **strongly encourage** you to name the Executor YAML as `config.yml`, otherwise using your containerize Executor with Kubernetes will require extra step.
+```{note}
+We **strongly encourage** you to name the Executor YAML as `config.yml`, otherwise using your containerize Executor with Kubernetes will require extra step. 
+When using {meth}`~jina.serve.executors.BaseExecutor.to_kubernetes_yaml()` or {meth}`~jina.serve.executors.BaseExecutor.to_docker_compose_yaml()`, Jina will add `--uses config.yml` in the entrypoint. 
+In order to change that, you will need to manually alter the generated files.
 ```
 
 ## Example: Dockerized Executor
@@ -106,9 +108,8 @@ and we can define such a configuration in `config.yml`:
 
 ```yaml
 jtype: ContainerizedEncoder
-metas:
-  py_modules:
-    - my_executor.py
+py_modules:
+ - my_executor.py
 ```
 
 ### Write `requirements.txt`
@@ -158,7 +159,7 @@ docker build -t my_containerized_executor .
 
 Once the build is successful, this is what you should see under `docker images`:
 
-```console
+```shell
 REPOSITORY                       TAG                IMAGE ID       CREATED          SIZE
 my_containerized_executor        latest             5cead0161cb5   13 seconds ago   2.21GB
 ```
@@ -168,8 +169,7 @@ my_containerized_executor        latest             5cead0161cb5   13 seconds ag
 The containerized Executor can be used like any other, the only difference being the 'docker' prefix in the `uses`
  parameter:
 ```python
-from docarray import DocumentArray, Document
-from jina import Flow
+from jina import Flow, DocumentArray, Document
 
 f = Flow().add(uses='docker://my_containerized_executor')
 
@@ -181,7 +181,7 @@ for doc in returned_docs:
     print(f'Document embedding of shape {doc.embedding.shape}')
 ```
 
-```console
+```shell
 Document returned with text: "This Document is embedded by ContainerizedEncoder"
 Document embedding of shape torch.Size([10])
 ```

@@ -1,5 +1,5 @@
 (monitoring)=
-# Use monitoring with Jina in Kubernetes
+# Monitor via Prometheus and Grafana
 
 First, let's have some context on the monitoring stack that we will be using during this guide.
 To leverage the {ref}`metrics <monitoring-flow>` that Jina exposes, we recommend using the Prometheus/Grafana stack. In this setup, Jina will expose different {ref}`metrics endpoint <monitoring-flow>`, and Prometheus will then be in charge of scraping these endpoints, as well as
@@ -12,6 +12,7 @@ Jina supports exposing the metrics, you are in charge of installing and managing
 
 We will show you in this guide how to easily deploy the Prometheus/Grafana stack and used them to monitor a Flow.
 
+(deploy-flow-monitoring)=
 ## Deploying the Flow and the monitoring stack
 
 ### Deploying on Kubernetes
@@ -165,6 +166,10 @@ This example is working locally because Prometheus is configured so that it list
 in contrast with deploying on Kubernetes, you need to tell Prometheus which port to look at. You can change these
 ports by modifying this [file](https://github.com/jina-ai/example-grafana-prometheus/blob/8baf519f7258da68cfe224775fc90537a749c305/prometheus-grafana-local/prometheus/prometheus.yml#L64)
 ```
+
+### Deploying on Jcloud
+In case your Flow is deployed on JCloud, there is no need to provision a monitoring stack yourself. Prometheus and Grafana are 
+handled by JCloud and you can find a dashboard URL using the command `jc status <flow_id>`
 
 ## Using Grafana to visualize metrics
 

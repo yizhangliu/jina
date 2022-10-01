@@ -1,6 +1,27 @@
 (kubernetes)=
 # Deploy with Kubernetes
 
+
+```{tip}
+This guide is designed for users who want to **manually** deploy Jina project on Kubernetes.
+
+If you are looking for a **one-click** solution to deploy and host Jina, meanwhile leveraging cloud-native stack such as Kubernetes, Prometheus and Grafana, **without worrying about provisioning**, please check out {ref}`jcloud`.
+```
+
+
+:::::{grid} 2
+:gutter: 3
+
+::::{grid-item-card} {octicon}`cpu;1.5em` Deploy a Flow to JCloud
+:link: fundamentals/jcloud/index
+:link-type: doc
+:class-card: color-gradient-card-2
+
+JCloud is a free CPU/GPU hosting platform for Jina projects.
+::::
+:::::
+
+
 Deploying a {class}`~jina.Flow` in Kubernetes is the recommended way of using Jina in production.
 
 Since a {class}`~jina.Flow` is composed of {class}`~jina.Executor`s which can run in different runtimes depending on how you want to deploy
@@ -13,6 +34,8 @@ always see them as just a starting point to get you off the ground.
 
 In this how-to you will go through how to deploy a simple Flow using Kubernetes, how to customize the Kubernetes configuration
 to your needs, and how to scale Executors using replicas and shards.
+
+
 
 ## Preliminaries
 
@@ -327,6 +350,59 @@ queried_docs = client.post("/search", inputs=docs)
 matches = queried_docs[0].matches
 print(f"Matched documents: {len(matches)}")
 ```
+
+## Update your Executor in Kubernetes
+
+In Kubernetes, you can update your Executors by patching the Deployment corresponding to your Executor.
+
+
+For instance, in the example above, you may want to change set a `batch_size` parameter for the CLIPEncoder.
+
+To do this, change the content of the Deployment inside the `executor.yml` dumped by `.to_kubernetes_yaml`.
+
+You need to add `--uses_with` and pass the batch size argument to it. This will be passed to the container inside the Deployment:
+
+```yaml
+    spec:
+      containers:
+      - args:
+        - executor
+        - --name
+        - encoder
+        - --k8s-namespace
+        - custom-namespace
+        - --uses
+        - config.yml
+        - --port
+        - '8080'
+        - --uses-metas
+        - '{}'
+        - --uses-with
+        - '{"batch_size": 64}'
+        - --native
+        command:
+        - jina
+```
+
+After doing so, you can re-apply your configuration and the new Executor will be deployed without affecting the other unchanged Deployments:
+
+```shell script
+kubectl apply -R -f ./k8s_flow
+```
+
+````{admonition} Other patching options
+:class: seealso
+
+Within Kubernetes, Executors are ordinary Deployments.
+This means that you can use other patching options provided by Kubernetes:
+
+
+- `kubectl replace` to replace an Executor using a complete configuration file
+- `kubectl patch` to patch an Executor using only a partial configuration file
+- `kubectl edit` to edit an Executor configuration on the fly in your editor
+
+You can find more information about these commands in the [official Kubernetes documentation](https://kubernetes.io/docs/concepts/cluster-administration/manage-deployment/).
+````
 
 ## Key takeaways
 

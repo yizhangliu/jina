@@ -38,7 +38,7 @@ from rich.table import Table
 
 from jina import __default_host__, __docker_host__, helper
 from jina.clients import Client
-from jina.clients.mixin import AsyncPostMixin, HealthCheckMixin, PostMixin
+from jina.clients.mixin import AsyncPostMixin, HealthCheckMixin, PostMixin, ProfileMixin
 from jina.enums import (
     DeploymentRoleType,
     FlowBuildLevel,
@@ -58,6 +58,7 @@ from jina.helper import (
     get_internal_ip,
     get_public_ip,
     is_port_free,
+    send_telemetry_event,
     typename,
 )
 from jina.jaml import JAMLCompatible
@@ -97,7 +98,14 @@ FALLBACK_PARSERS = [
 ]
 
 
-class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=FlowType):
+class Flow(
+    PostMixin,
+    ProfileMixin,
+    HealthCheckMixin,
+    JAMLCompatible,
+    ExitStack,
+    metaclass=FlowType,
+):
     """Flow is how Jina streamlines and distributes Executors."""
 
     # overload_inject_start_client_flow
@@ -110,7 +118,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         port: Optional[int] = None,
         protocol: Optional[str] = 'GRPC',
         proxy: Optional[bool] = False,
-        return_responses: Optional[bool] = False,
         tls: Optional[bool] = False,
         **kwargs,
     ):
@@ -121,7 +128,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         :param port: The port of the Gateway, which the client should connect to.
         :param protocol: Communication protocol between server and client.
         :param proxy: If set, respect the http_proxy and https_proxy environment variables. otherwise, it will unset these proxy variables before start. gRPC seems to prefer no proxy
-        :param return_responses: If set, return results as List of Requests instead of a reduced DocArray.
         :param tls: If set, connect to gateway using tls encryption
 
         .. # noqa: DAR202
@@ -142,12 +148,13 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         deployments_disable_reduce: Optional[str] = '[]',
         description: Optional[str] = None,
         env: Optional[dict] = None,
+        exit_on_exceptions: Optional[List[str]] = [],
         expose_endpoints: Optional[str] = None,
         expose_graphql_endpoint: Optional[bool] = False,
         floating: Optional[bool] = False,
         graph_conditions: Optional[str] = '{}',
         graph_description: Optional[str] = '{}',
-        grpc_server_kwargs: Optional[dict] = None,
+        grpc_server_options: Optional[dict] = None,
         host: Optional[str] = '0.0.0.0',
         host_in: Optional[str] = '0.0.0.0',
         log_config: Optional[str] = None,
@@ -156,11 +163,10 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         native: Optional[bool] = False,
         no_crud_endpoints: Optional[bool] = False,
         no_debug_endpoints: Optional[bool] = False,
-        optout_telemetry: Optional[bool] = False,
         output_array_type: Optional[str] = None,
         polling: Optional[str] = 'ANY',
         port: Optional[int] = None,
-        port_monitoring: Optional[int] = None,
+        port_monitoring: Optional[str] = None,
         prefetch: Optional[int] = 1000,
         protocol: Optional[str] = 'GRPC',
         proxy: Optional[bool] = False,
@@ -193,12 +199,13 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         :param deployments_disable_reduce: list JSON disabling the built-in merging mechanism for each Deployment listed
         :param description: The description of this HTTP server. It will be used in automatics docs such as Swagger UI.
         :param env: The map of environment variables that are available inside runtime
+        :param exit_on_exceptions: List of exceptions that will cause the Executor to shut down.
         :param expose_endpoints: A JSON string that represents a map from executor endpoints (`@requests(on=...)`) to HTTP endpoints.
         :param expose_graphql_endpoint: If set, /graphql endpoint is added to HTTP interface.
         :param floating: If set, the current Pod/Deployment can not be further chained, and the next `.add()` will chain after the last Pod/Deployment not this current one.
         :param graph_conditions: Dictionary stating which filtering conditions each Executor in the graph requires to receive Documents.
         :param graph_description: Routing graph for the gateway
-        :param grpc_server_kwargs: Dictionary of kwargs arguments that will be passed to the grpc server when starting the server # todo update
+        :param grpc_server_options: Dictionary of kwargs arguments that will be passed to the grpc server as options when starting the server, example : {'grpc.max_send_message_length': -1}
         :param host: The host address of the runtime, by default it is 0.0.0.0.
         :param host_in: The host address for binding to, by default it is 0.0.0.0
         :param log_config: The YAML config of the logger used in this object.
@@ -217,7 +224,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
                   Any executor that has `@requests(on=...)` bind with those values will receive data requests.
         :param no_debug_endpoints: If set, `/status` `/post` endpoints are removed from HTTP interface.
-        :param optout_telemetry: If set, disables telemetry during the Flow/Pod/Runtime start.
         :param output_array_type: The type of array `tensor` and `embedding` will be serialized to.
 
           Supports the same types as `docarray.to_protobuf(.., ndarray_type=...)`, which can be found
@@ -257,6 +263,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         :param timeout_send: The timeout in milliseconds used when sending data requests to Executors, -1 means no timeout, disabled by default
         :param title: The title of this HTTP server. It will be used in automatics docs such as Swagger UI.
         :param uses: The config of the executor, it could be one of the followings:
+                  * the string literal of an Executor class name
                   * an Executor YAML file (.yml, .yaml, .jaml)
                   * a Jina Hub Executor (must start with `jinahub://` or `jinahub+docker://`)
                   * a docker image (must start with `docker://`)
@@ -289,7 +296,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         inspect: Optional[str] = 'COLLECT',
         log_config: Optional[str] = None,
         name: Optional[str] = None,
-        optout_telemetry: Optional[bool] = False,
         quiet: Optional[bool] = False,
         quiet_error: Optional[bool] = False,
         uses: Optional[str] = None,
@@ -312,7 +318,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
               - ...
 
               When not given, then the default naming strategy will apply.
-        :param optout_telemetry: If set, disables telemetry during the Flow/Pod/Runtime start.
         :param quiet: If set, then no log will be emitted from this object.
         :param quiet_error: If set, then exception stack information will not be added to the log
         :param uses: The YAML path represents a flow. It can be either a local file path or a URL.
@@ -362,7 +367,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         :param port: The port of the Gateway, which the client should connect to.
         :param protocol: Communication protocol between server and client.
         :param proxy: If set, respect the http_proxy and https_proxy environment variables. otherwise, it will unset these proxy variables before start. gRPC seems to prefer no proxy
-        :param return_responses: If set, return results as List of Requests instead of a reduced DocArray.
         :param tls: If set, connect to gateway using tls encryption
         :param compression: The compression mechanism used when sending requests from the Head to the WorkerRuntimes. For more details, check https://grpc.github.io/grpc/python/grpc.html#compression.
         :param cors: If set, a CORS middleware is added to FastAPI frontend to allow cross-origin access.
@@ -370,12 +374,13 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         :param deployments_disable_reduce: list JSON disabling the built-in merging mechanism for each Deployment listed
         :param description: The description of this HTTP server. It will be used in automatics docs such as Swagger UI.
         :param env: The map of environment variables that are available inside runtime
+        :param exit_on_exceptions: List of exceptions that will cause the Executor to shut down.
         :param expose_endpoints: A JSON string that represents a map from executor endpoints (`@requests(on=...)`) to HTTP endpoints.
         :param expose_graphql_endpoint: If set, /graphql endpoint is added to HTTP interface.
         :param floating: If set, the current Pod/Deployment can not be further chained, and the next `.add()` will chain after the last Pod/Deployment not this current one.
         :param graph_conditions: Dictionary stating which filtering conditions each Executor in the graph requires to receive Documents.
         :param graph_description: Routing graph for the gateway
-        :param grpc_server_kwargs: Dictionary of kwargs arguments that will be passed to the grpc server when starting the server # todo update
+        :param grpc_server_options: Dictionary of kwargs arguments that will be passed to the grpc server as options when starting the server, example : {'grpc.max_send_message_length': -1}
         :param host: The host address of the runtime, by default it is 0.0.0.0.
         :param host_in: The host address for binding to, by default it is 0.0.0.0
         :param log_config: The YAML config of the logger used in this object.
@@ -394,7 +399,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
                   Any executor that has `@requests(on=...)` bind with those values will receive data requests.
         :param no_debug_endpoints: If set, `/status` `/post` endpoints are removed from HTTP interface.
-        :param optout_telemetry: If set, disables telemetry during the Flow/Pod/Runtime start.
         :param output_array_type: The type of array `tensor` and `embedding` will be serialized to.
 
           Supports the same types as `docarray.to_protobuf(.., ndarray_type=...)`, which can be found
@@ -434,6 +438,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         :param timeout_send: The timeout in milliseconds used when sending data requests to Executors, -1 means no timeout, disabled by default
         :param title: The title of this HTTP server. It will be used in automatics docs such as Swagger UI.
         :param uses: The config of the executor, it could be one of the followings:
+                  * the string literal of an Executor class name
                   * an Executor YAML file (.yml, .yaml, .jaml)
                   * a Jina Hub Executor (must start with `jinahub://` or `jinahub+docker://`)
                   * a docker image (must start with `docker://`)
@@ -464,7 +469,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
               - ...
 
               When not given, then the default naming strategy will apply.
-        :param optout_telemetry: If set, disables telemetry during the Flow/Pod/Runtime start.
         :param quiet: If set, then no log will be emitted from this object.
         :param quiet_error: If set, then exception stack information will not be added to the log
         :param uses: The YAML path represents a flow. It can be either a local file path or a URL.
@@ -790,10 +794,12 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         docker_kwargs: Optional[dict] = None,
         entrypoint: Optional[str] = None,
         env: Optional[dict] = None,
+        exit_on_exceptions: Optional[List[str]] = [],
         external: Optional[bool] = False,
         floating: Optional[bool] = False,
         force_update: Optional[bool] = False,
         gpus: Optional[str] = None,
+        grpc_server_options: Optional[dict] = None,
         host: Optional[str] = '0.0.0.0',
         host_in: Optional[str] = '0.0.0.0',
         install_requirements: Optional[bool] = False,
@@ -801,7 +807,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         monitoring: Optional[bool] = False,
         name: Optional[str] = None,
         native: Optional[bool] = False,
-        optout_telemetry: Optional[bool] = False,
         output_array_type: Optional[str] = None,
         polling: Optional[str] = 'ANY',
         port: Optional[int] = None,
@@ -844,6 +849,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
           More details can be found in the Docker SDK docs:  https://docker-py.readthedocs.io/en/stable/
         :param entrypoint: The entrypoint command overrides the ENTRYPOINT in Docker image. when not set then the Docker image ENTRYPOINT takes effective.
         :param env: The map of environment variables that are available inside runtime
+        :param exit_on_exceptions: List of exceptions that will cause the Executor to shut down.
         :param external: The Deployment will be considered an external Deployment that has been started independently from the Flow.This Deployment will not be context managed by the Flow.
         :param floating: If set, the current Pod/Deployment can not be further chained, and the next `.add()` will chain after the last Pod/Deployment not this current one.
         :param force_update: If set, always pull the latest Hub Executor bundle even it exists on local
@@ -855,6 +861,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
               - To access specified gpus based on device id, use `--gpus device=[YOUR-GPU-DEVICE-ID]`
               - To access specified gpus based on multiple device id, use `--gpus device=[YOUR-GPU-DEVICE-ID1],device=[YOUR-GPU-DEVICE-ID2]`
               - To specify more parameters, use `--gpus device=[YOUR-GPU-DEVICE-ID],runtime=nvidia,capabilities=display
+        :param grpc_server_options: Dictionary of kwargs arguments that will be passed to the grpc server as options when starting the server, example : {'grpc.max_send_message_length': -1}
         :param host: The host address of the runtime, by default it is 0.0.0.0.
         :param host_in: The host address for binding to, by default it is 0.0.0.0
         :param install_requirements: If set, install `requirements.txt` in the Hub Executor bundle to local
@@ -870,7 +877,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
               When not given, then the default naming strategy will apply.
         :param native: If set, only native Executors is allowed, and the Executor is always run inside WorkerRuntime.
-        :param optout_telemetry: If set, disables telemetry during the Flow/Pod/Runtime start.
         :param output_array_type: The type of array `tensor` and `embedding` will be serialized to.
 
           Supports the same types as `docarray.to_protobuf(.., ndarray_type=...)`, which can be found
@@ -913,6 +919,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
           - by default, `--uses` YAML file is always uploaded.
           - uploaded files are by default isolated across the runs. To ensure files are submitted to the same workspace across different runs, use `--workspace-id` to specify the workspace.
         :param uses: The config of the executor, it could be one of the followings:
+                  * the string literal of an Executor class name
                   * an Executor YAML file (.yml, .yaml, .jaml)
                   * a Jina Hub Executor (must start with `jinahub://` or `jinahub+docker://`)
                   * a docker image (must start with `docker://`)
@@ -991,6 +998,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
           More details can be found in the Docker SDK docs:  https://docker-py.readthedocs.io/en/stable/
         :param entrypoint: The entrypoint command overrides the ENTRYPOINT in Docker image. when not set then the Docker image ENTRYPOINT takes effective.
         :param env: The map of environment variables that are available inside runtime
+        :param exit_on_exceptions: List of exceptions that will cause the Executor to shut down.
         :param external: The Deployment will be considered an external Deployment that has been started independently from the Flow.This Deployment will not be context managed by the Flow.
         :param floating: If set, the current Pod/Deployment can not be further chained, and the next `.add()` will chain after the last Pod/Deployment not this current one.
         :param force_update: If set, always pull the latest Hub Executor bundle even it exists on local
@@ -1002,6 +1010,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
               - To access specified gpus based on device id, use `--gpus device=[YOUR-GPU-DEVICE-ID]`
               - To access specified gpus based on multiple device id, use `--gpus device=[YOUR-GPU-DEVICE-ID1],device=[YOUR-GPU-DEVICE-ID2]`
               - To specify more parameters, use `--gpus device=[YOUR-GPU-DEVICE-ID],runtime=nvidia,capabilities=display
+        :param grpc_server_options: Dictionary of kwargs arguments that will be passed to the grpc server as options when starting the server, example : {'grpc.max_send_message_length': -1}
         :param host: The host address of the runtime, by default it is 0.0.0.0.
         :param host_in: The host address for binding to, by default it is 0.0.0.0
         :param install_requirements: If set, install `requirements.txt` in the Hub Executor bundle to local
@@ -1017,7 +1026,6 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
               When not given, then the default naming strategy will apply.
         :param native: If set, only native Executors is allowed, and the Executor is always run inside WorkerRuntime.
-        :param optout_telemetry: If set, disables telemetry during the Flow/Pod/Runtime start.
         :param output_array_type: The type of array `tensor` and `embedding` will be serialized to.
 
           Supports the same types as `docarray.to_protobuf(.., ndarray_type=...)`, which can be found
@@ -1060,6 +1068,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
           - by default, `--uses` YAML file is always uploaded.
           - uploaded files are by default isolated across the runs. To ensure files are submitted to the same workspace across different runs, use `--workspace-id` to specify the workspace.
         :param uses: The config of the executor, it could be one of the followings:
+                  * the string literal of an Executor class name
                   * an Executor YAML file (.yml, .yaml, .jaml)
                   * a Jina Hub Executor (must start with `jinahub://` or `jinahub+docker://`)
                   * a docker image (must start with `docker://`)
@@ -1098,8 +1107,8 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
         """
         # implementation_stub_inject_end_add
 
-        needs = kwargs.get('needs', None)
-        copy_flow = kwargs.get('copy_flow', True)
+        needs = kwargs.pop('needs', None)
+        copy_flow = kwargs.pop('copy_flow', True)
         deployment_role = kwargs.get('deployment_role', DeploymentRoleType.DEPLOYMENT)
 
         op_flow = copy.deepcopy(self) if copy_flow else self
@@ -1429,6 +1438,14 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
         self._build_level = FlowBuildLevel.EMPTY
 
+        self._stop_time = time.time()
+        send_telemetry_event(
+            event='stop',
+            obj=self,
+            entity_id=self._entity_id,
+            duration=self._stop_time - self._start_time,
+            exc_type=str(exc_type),
+        )
         self.logger.debug('flow is closed!')
         self.logger.close()
 
@@ -1446,7 +1463,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
         :return: this instance
         """
-
+        self._start_time = time.time()
         if self._build_level.value < FlowBuildLevel.GRAPH.value:
             self.build(copy_flow=False)
 
@@ -1470,10 +1487,7 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
 
         self._build_level = FlowBuildLevel.RUNNING
 
-        if not self.args.optout_telemetry and 'JINA_OPTOUT_TELEMETRY' not in os.environ:
-            from jina.serve.helper import _telemetry_run_in_thread
-
-            _telemetry_run_in_thread(event='flow.start')
+        send_telemetry_event(event='start', obj=self, entity_id=self._entity_id)
 
         return self
 
@@ -2401,3 +2415,12 @@ class Flow(PostMixin, HealthCheckMixin, JAMLCompatible, ExitStack, metaclass=Flo
             )
 
         return obj
+
+    @property
+    def _entity_id(self) -> str:
+        import uuid
+
+        if hasattr(self, '_entity_id_'):
+            return self._entity_id_
+        self._entity_id_ = uuid.uuid1().hex
+        return self._entity_id_

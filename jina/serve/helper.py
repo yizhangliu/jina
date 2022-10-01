@@ -1,27 +1,19 @@
-def _telemetry_run_in_thread(event: str) -> None:
-    """Sends in a thread a request with telemetry for a given event
-    :param event: Event leading to the telemetry entry
+import typing
+from typing import Optional, Union
+
+if typing.TYPE_CHECKING:
+    from prometheus_client.context_managers import Timer
+    from prometheus_client import Summary
+
+from contextlib import nullcontext
+
+
+def _get_summary_time_context_or_null(
+    summary_metric: Optional['Summary'],
+) -> Union[nullcontext, 'Timer']:
     """
-
-    import base64
-    import json
-    import urllib
-    import threading
-
-    def _telemetry():
-        url = 'https://telemetry.jina.ai/'
-        try:
-            from jina.helper import get_full_version
-            metas, _ = get_full_version()
-            data = base64.urlsafe_b64encode(
-                json.dumps({**metas, 'event': event}).encode('utf-8')
-            )
-            req = urllib.request.Request(
-                url, data=data, headers={'User-Agent': 'Mozilla/5.0'}
-            )
-            urllib.request.urlopen(req)
-
-        except:
-            pass
-
-    threading.Thread(target=_telemetry, daemon=True).start()
+    helper function to either get a time context or a nullcontext if the summary metric is None
+    :param summary_metric: An optional metric
+    :return: either a Timer context or a nullcontext
+    """
+    return summary_metric.time() if summary_metric else nullcontext()

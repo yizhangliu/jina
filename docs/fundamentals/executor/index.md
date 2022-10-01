@@ -31,14 +31,6 @@ class MyExecutor(Executor):
         print(docs)  # process docs here
 ```
 
-````{admonition} See Also
-:class: seealso
-
-Executor and Flow are the two fundamental concepts in Jina.
-
-- {ref}`Executor <executor>` is how Jina processes Documents;
-- {ref}`Flow <flow>` is how Jina streamlines and scales Executors.
-````
 
 
 ```{toctree}
@@ -49,7 +41,7 @@ executor-methods
 monitoring-executor
 executor-run
 executor-serve
-yaml-spec
 executor-files
 containerize-executor
+yaml-spec
 ```

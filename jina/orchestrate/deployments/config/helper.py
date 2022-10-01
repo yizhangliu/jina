@@ -1,9 +1,11 @@
 import os
+from typing import Dict
+
+from hubble.executor.helper import parse_hub_uri
+from hubble.executor.hubio import HubIO
 
 from jina import __default_executor__, __version__
 from jina.enums import PodRoleType
-from jina.hubble.helper import parse_hub_uri
-from jina.hubble.hubio import HubIO
 
 
 def get_image_name(uses: str) -> str:
@@ -50,10 +52,9 @@ def get_base_executor_version():
     import requests
 
     try:
-        url = 'https://registry.hub.docker.com/v1/repositories/jinaai/jina/tags'
-        tags = requests.get(url).json()
-        name_set = {tag['name'] for tag in tags}
-        if __version__ in name_set:
+        url = 'https://registry.hub.docker.com/v2/repositories/jinaai/jina/tags'
+        result: Dict = requests.get(url, params={'name': __version__}).json()
+        if result.get('count', 0) > 0:
             return __version__
         else:
             return 'master'

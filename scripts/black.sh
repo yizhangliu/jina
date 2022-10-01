@@ -3,9 +3,10 @@ pip install black==22.3.0
 arrVar=()
 echo we ignore non-*.py files and files generated from protobuf
 excluded_files=(
-   jina/proto/jina_pb2.py
-   jina/proto/jina_pb2_grpc.py
-   jina/resources/executor-template/executor.py
+   jina/proto/pb/jina_pb2.py
+   jina/proto/pb/jina_pb2_grpc.py
+   jina/proto/pb2/jina_pb2.py
+   jina/proto/pb2/jina_pb2_grpc.py
    docs/conf.py
 )
 for changed_file in $CHANGED_FILES; do

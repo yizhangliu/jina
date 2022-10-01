@@ -49,10 +49,8 @@ def test_use_from_local_dir_flow_level():
 
 
 @pytest.fixture
-def local_hub_executor(tmpdir, test_envs):
-    from jina.hubble import HubExecutor, helper, hubapi
-
-    hubapi._hub_root = Path(os.environ.get('JINA_HUB_ROOT'))
+def local_hub_executor(tmpdir):
+    from hubble.executor import HubExecutor, helper, hubapi
 
     pkg_path = Path(__file__).parent / 'dummyhub'
     stream_data = helper.archive_package(pkg_path)
@@ -64,19 +62,18 @@ def local_hub_executor(tmpdir, test_envs):
     )
 
 
-def test_use_from_local_hub_deployment_level(
-    test_envs, mocker, monkeypatch, local_hub_executor
-):
-    from jina.hubble.hubio import HubExecutor, HubIO
+def test_use_from_local_hub_deployment_level(mocker, monkeypatch, local_hub_executor):
+    from hubble.executor.hubio import HubExecutor, HubIO
 
     mock = mocker.Mock()
 
     def _mock_fetch(
         name,
-        tag=None,
-        secret=None,
+        tag,
         image_required=True,
         rebuild_image=True,
+        *,
+        secret=None,
         force=False,
     ):
         mock(name=name)
@@ -99,19 +96,18 @@ def test_use_from_local_hub_deployment_level(
         pass
 
 
-def test_use_from_local_hub_flow_level(
-    test_envs, mocker, monkeypatch, local_hub_executor
-):
-    from jina.hubble.hubio import HubExecutor, HubIO
+def test_use_from_local_hub_flow_level(mocker, monkeypatch, local_hub_executor):
+    from hubble.executor.hubio import HubExecutor, HubIO
 
     mock = mocker.Mock()
 
     def _mock_fetch(
         name,
-        tag=None,
-        secret=None,
+        tag,
         image_required=True,
         rebuild_image=True,
+        *,
+        secret=None,
         force=False,
     ):
         mock(name=name)

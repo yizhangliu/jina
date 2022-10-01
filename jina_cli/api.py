@@ -127,6 +127,17 @@ def ping(args: 'Namespace'):
     NetworkChecker(args)
 
 
+def dryrun(args: 'Namespace'):
+    """
+    Check the health of a Flow
+
+    :param args: arguments coming from the CLI.
+    """
+    from jina.checker import dry_run_checker
+
+    dry_run_checker(args)
+
+
 def client(args: 'Namespace'):
     """
     Start a client connects to the gateway
@@ -170,9 +181,9 @@ def hub(args: 'Namespace'):
     Start a hub builder for push, pull
     :param args: arguments coming from the CLI.
     """
-    from jina.hubble.hubio import HubIO
+    from hubble.executor.hubio import HubIO
 
-    getattr(HubIO(args), args.hub)()
+    getattr(HubIO(args), args.hub_cli)()
 
 
 def new(args: 'Namespace'):
@@ -199,3 +210,23 @@ def help(args: 'Namespace'):
     from jina_cli.lookup import lookup_and_print
 
     lookup_and_print(args.query.lower())
+
+
+def auth(args: 'Namespace'):
+    """
+    Authenticate a user
+    :param args: arguments coming from the CLI.
+    """
+    from hubble import api
+
+    getattr(api, args.auth_cli.replace('-', '_'))(args)
+
+
+def cloud(args: 'Namespace'):
+    """
+    Use jcloud (Jina Cloud) commands
+    :param args: arguments coming from the CLI.
+    """
+    from jcloud import api
+
+    getattr(api, args.jc_cli.replace('-', '_'))(args)

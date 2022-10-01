@@ -1,10 +1,11 @@
+import json
 import os
 
 import pytest
+from hubble.executor import HubExecutor
+from hubble.executor.hubio import HubIO
 
 from jina import __version__
-from jina.hubble import HubExecutor
-from jina.hubble.hubio import HubIO
 from jina.orchestrate.deployments.config.helper import (
     get_base_executor_version,
     get_image_name,
@@ -15,13 +16,20 @@ from jina.orchestrate.deployments.config.helper import (
 @pytest.mark.parametrize('is_master', (True, False))
 def test_version(is_master, requests_mock):
     if is_master:
-        version = 'v2'
+        count = 0
     else:
         # current version is published already
-        version = __version__
+        count = 3
     requests_mock.get(
-        'https://registry.hub.docker.com/v1/repositories/jinaai/jina/tags',
-        text='[{"name": "v1"}, {"name": "' + version + '"}]',
+        'https://registry.hub.docker.com/v2/repositories/jinaai/jina/tags',
+        text=json.dumps(
+            {
+                'count': count,
+                'next': 'abc',
+                'previous': 'def',
+                'results': [{'a': 'b', 'c': 'd'}],
+            }
+        ),
     )
     v = get_base_executor_version()
     if is_master:
@@ -39,10 +47,11 @@ def test_get_image_name(mocker, monkeypatch):
 
     def _mock_fetch(
         name,
-        tag=None,
-        secret=None,
+        tag,
         image_required=True,
         rebuild_image=True,
+        *,
+        secret=None,
         force=False,
     ):
         mock(name=name, rebuild_image=rebuild_image)

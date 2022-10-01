@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence, Union
 
+from jina import __cache_path__
 from jina.helper import convert_tuple_to_list, iscoroutinefunction
 from jina.importer import ImportExtensions
 from jina.serve.executors.metas import get_default_metas
@@ -16,11 +17,7 @@ if TYPE_CHECKING:
 
 @functools.lru_cache()
 def _get_locks_root() -> Path:
-    locks_root = Path(
-        os.environ.get(
-            'JINA_LOCKS_ROOT', Path.home().joinpath('.jina').joinpath('locks')
-        )
-    )
+    locks_root = Path(os.path.join(__cache_path__, 'locks'))
 
     if not locks_root.exists():
         locks_root.mkdir(parents=True, exist_ok=True)

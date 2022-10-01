@@ -7,49 +7,56 @@ To create your Hub {class}`~jina.Executor`, you just need to run:
 jina hub new
 ```
 
+<script id="asciicast-T98aWaJLe0r0ul3cXGk7AzqUs" src="https://asciinema.org/a/T98aWaJLe0r0ul3cXGk7AzqUs.js" async></script>
 
-```{figure} screenshots/create-new.gif
-:align: center
-```
+For the basic configuration (advanced configuration is optional but rarely necessary), you will be asked for two things: 
 
-For the basic configuration, 
-you will be asked for two things: The Executor’s name and where it should be saved. A more advanced configuration is optional but rarely necessary.
+- Name of your Executor 
+- Path to the folder where it should be saved. 
 
 After running the command, a project with the following structure will be generated:
 
 ```text
 MyExecutor/
-├── Dockerfile	        # Advanced configuration will generate this file
-├── manifest.yml
+├── executor.py
 ├── config.yml
 ├── README.md
 ├── requirements.txt
-└── executor.py
+└── Dockerfile
 ```
 
-- `manifest.yml` should contain the Executor's annotations for getting better exposure on Jina Hub.
-- `config.yml` is the Executor's configuration file, where you can define **__init__** arguments using **with** keyword.
-- `requirements.txt` describes the Executor's Python dependencies.
 - `executor.py` should contain your Executor's main logic.
+- `config.yml` is the Executor's {ref}`configuration <executor-yaml-spec>` file, where you can define `__init__` arguments using `with` keyword. You can also define meta annotations relevant to the executor, for getting better exposer on Jina Hub.
+- `requirements.txt` describes the Executor's Python dependencies.
 - `README.md` should describe how to use your Executor.
+- `Dockerfile` will only be generated once you request advanced configuration.
 
 
-## Fields of `manifest.yml`
+## Tips
 
-`manifest.yml` is optional.
 
-`manifest.yml` annotates your image so that it can be better managed by the Hub portal. To get better exposure on Jina Hub, you may want to 
-carefully set `manifest.yml` to the correct values:
+When developing Hub {class}`~jina.Executor`s, make sure to follow these tips:
 
-| Key                | Description                                                                                | Default |
-| ---                | ---                                                                                        | ---     |
-| `manifest_version` | The version of the manifest protocol                                                       | `1`     |
-| `name`             | Human-readable title of the Executor                                                       | None    |
-| `description`      | Human-readable description of the Executor                                                 | None    |
-| `url`              | URL to find more information about the Executor, normally the GitHub repo URL              | None    |
-| `keywords`         | A list of strings to help users filter and locate your package                             | None    |
+* Use `jina hub new` CLI to create an Executor
 
-```{admonition} See Also
-:class: seealso
-{ref}`Hub Executor best practices <hub-executor-best-practices>`
+  To get started, always use the command and follow the instructions. This will ensure you follow the right file 
+structure.
+
+* No need to write Dockerfile manually 
+
+  Most of the time, you do not need to create `Dockerfile` manually. Build system will generate a well-optimized Dockerfile according to your Executor package.
+
+
+```{tip}
+In the wizard of `jina hub new`, you can choose from four Dockerfile templates: `cpu`, `tf-gpu`, `torch-gpu`, and `jax-gpu`.
 ```
+
+
+* No need to bump Jina version
+
+  Hub executors are version-agnostic. When you pull an Executor from Hub, Hubble will always select the right Jina version for you. No worries about Jina version upgrade!
+
+
+* Fill in metadata of your Executor correctly
+
+  Information you include under the `metas` key, in `config.yml`, will be displayed on our website. Want to make your Executor eye-catching on our website? Fill all `metas` fields in `config.yml` with heart & love! {ref}`Its specification can be found here<config.yml>`.
